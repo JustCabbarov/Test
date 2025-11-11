@@ -53,7 +53,8 @@ public class UserService
      }
 
         Console.WriteLine("Login failed");
-        return false
+        return false;;
+
     }
 
     public async Task PrintUserEmailAsync(int userId)
