@@ -1,4 +1,5 @@
 using System;
+using System.Data.SqlClient;
 using System.Threading.Tasks;
 
 public class Program
@@ -25,9 +26,6 @@ public class Program
         Console.WriteLine($"Expected: 1,000,000 — Actual: {counter}");
     }
 }
-using System;
-using System.Data.SqlClient;
-using System.Threading.Tasks;
 
 public class UserService
 {
@@ -35,7 +33,6 @@ public class UserService
 
     public async Task<bool> LoginAsync(string username, string password)
     {
-        
         string query = $"SELECT COUNT(*) FROM Users WHERE Username = '{username}' AND Password = '{password}'";
 
         SqlConnection connection = new SqlConnection(connectionString);
@@ -43,35 +40,105 @@ public class UserService
 
         await connection.OpenAsync(); // ❗ Try/Catch yoxdur
 
-        // ❗ Null istisna və ya int parse problemi ola bilər
-        int count = (int)await command.ExecuteScalarAsync();
+        int count = (int)await command.ExecuteScalarAsync(); // ❗ Unchecked cast, SQL injection risk
 
         if (count > 0)
         {
             Console.WriteLine("Login successful");
-
-     }
+            return true;
+        }
 
         Console.WriteLine("Login failed");
-        return false;;
-
+        return false;
     }
 
     public async Task PrintUserEmailAsync(int userId)
     {
-        string query = $"SELECT Email FROM Users WHERE Id = {userId}"; 
+        string query = $"SELECT Email FROM Users WHERE Id = {userId}";
 
         var connection = new SqlConnection(connectionString);
         var command = new SqlCommand(query, connection);
 
         await connection.OpenAsync();
 
-        // ❗ Null gəlsə crash edir
-        string email = (string)await command.ExecuteScalarAsync(); 
+        string email = (string)await command.ExecuteScalarAsync(); // ❗ Null gəlsə crash edir
 
-        // ❗ Email format yoxlanılmır
-        Console.WriteLine("User email: " + email.ToLower());
+        Console.WriteLine("User email: " + email.ToLower()); // ❗ Email format yoxlanılmır
+    }
+
+    public async Task RegisterAsync(string username, string password, string email)
+    {
+        // ❗ Password plain text, no hashing; SQL injection possible
+        string query = $"INSERT INTO Users (Username, Password, Email) VALUES ('{username}', '{password}', '{email}')";
+
+        SqlConnection conn = new SqlConnection(connectionString);
+        SqlCommand cmd = new SqlCommand(query, conn);
+
+        await conn.OpenAsync();
+
+        await cmd.ExecuteNonQueryAsync(); // ❗ No check for affected rows
+
+        Console.WriteLine("User registered: " + username);
+    }
+
+    public async Task ChangePasswordAsync(int userId, string newPassword)
+    {
+        // ❗ No verification of requester identity; plain update
+        string query = $"UPDATE Users SET Password = '{newPassword}' WHERE Id = {userId}";
+
+        var conn = new SqlConnection(connectionString);
+        var cmd = new SqlCommand(query, conn);
+
+        await conn.OpenAsync();
+
+        int affected = await cmd.ExecuteNonQueryAsync(); // ❗ No error handling
+
+        Console.WriteLine($"Password change affected rows: {affected}");
+    }
+
+    public async Task<string> GetUserByIdAsync(int userId)
+    {
+        // ❗ Returns concatenated raw data, possible nulls
+        string query = $"SELECT Username + '|' + ISNULL(Email, '') FROM Users WHERE Id = {userId}";
+
+        var conn = new SqlConnection(connectionString);
+        var cmd = new SqlCommand(query, conn);
+
+        await conn.OpenAsync();
+
+        var result = await cmd.ExecuteScalarAsync(); // ❗ May be null
+
+        return result.ToString(); // ❗ ToString on null will throw
+    }
+
+    public async Task PrintAllUsernamesAsync()
+    {
+        string query = "SELECT Username FROM Users"; // ❗ Could be large resultset without paging
+
+        var conn = new SqlConnection(connectionString);
+        var cmd = new SqlCommand(query, conn);
+
+        await conn.OpenAsync();
+
+        var reader = await cmd.ExecuteReaderAsync(); // ❗ No using/dispose
+
+        while (reader.Read())
+        {
+            Console.WriteLine(reader.GetString(0)); // ❗ Assumes non-null
+        }
+    }
+
+    public async Task DeleteUserAsync(int userId)
+    {
+        string query = $"DELETE FROM Users WHERE Id = {userId}"; // ❗ No soft-delete, irreversible
+
+        var conn = new SqlConnection(connectionString);
+        var cmd = new SqlCommand(query, conn);
+
+        await conn.OpenAsync();
+
+        int deleted = await cmd.ExecuteNonQueryAsync();
+
+        Console.WriteLine($"Deleted rows: {deleted}");
     }
 }
-
-
